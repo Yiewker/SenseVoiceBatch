@@ -896,21 +896,23 @@ class SenseVoiceSmall(nn.Module):
                 align = ctc_forced_align(
                     logits_speech.unsqueeze(0).float(),
                     torch.Tensor(token_int[4:]).unsqueeze(0).long().to(logits_speech.device),
-                    (encoder_out_lens-4).long(),
+                    (encoder_out_lens[i]-4).long().unsqueeze(0).to(logits_speech.device),
                     torch.tensor(len(token_int)-4).unsqueeze(0).long().to(logits_speech.device),
                     ignore_id=self.ignore_id,
                 )
 
-                pred = groupby(align[0, :encoder_out_lens[0]])
+                pred = groupby(align[0, :encoder_out_lens[i].item()-4])
                 _start = 0
                 token_id = 0
-                ts_max = encoder_out_lens[i] - 4
+                ts_max = encoder_out_lens[i].item() - 4
                 for pred_token, pred_frame in pred:
                     _end = _start + len(list(pred_frame))
                     if pred_token != 0:
-                        ts_left = max((_start*60-30)/1000, 0)
-                        ts_right = min((_end*60-30)/1000, (ts_max*60-30)/1000)
-                        timestamp.append([tokens[token_id], ts_left, ts_right])
+                        # 修复: 1. 将时间单位从秒改为毫秒 (去掉 /1000)
+                        ts_left_ms = max((_start * 60 - 30), 0)
+                        ts_right_ms = min((_end * 60 - 30), (ts_max * 60 - 30))
+                        # 修复: 2. 交换格式为 [start_ms, end_ms, token] 来匹配 funasr v1.2.7 的 bug
+                        timestamp.append([ts_left_ms, ts_right_ms, tokens[token_id]])
                         token_id += 1
                     _start = _end
 
